@@ -1,4 +1,3 @@
-
 import io
 import base64
 import xml.etree.ElementTree as ET
@@ -193,9 +192,27 @@ def _extract_invoice_data_from_xml(xml_root: ET.Element) -> dict:
         except Exception:
             issue_date = raw_date
         invoice_number = f"{invoice_series}{invoice_number}"
+
+        # ---------- Periodo de facturación global ----------
+        invoicing_period = {}
+        issue_data = invoice_element.find("InvoiceIssueData")
+        if issue_data is not None:
+            invp = issue_data.find("InvoicingPeriod")
+            if invp is not None:
+                start = invp.findtext("StartDate", default="")
+                end = invp.findtext("EndDate", default="")
+                def _fmt_date(d):
+                    try:
+                        return datetime.strptime(d, "%Y-%m-%d").strftime("%d/%m/%Y")
+                    except Exception:
+                        return d or "N/A"
+                invoicing_period = {"Inicio": _fmt_date(start), "Fin": _fmt_date(end)}
+        else:
+            invoicing_period = {}
     else:
         invoice_number = issue_date = invoice_type = invoice_currency = "N/A"
         invoice_class_desc = "N/A"
+        invoicing_period = {}
 
     totals = {}
     if invoice_element is not None:
@@ -217,11 +234,29 @@ def _extract_invoice_data_from_xml(xml_root: ET.Element) -> dict:
             quantity = line.findtext("Quantity", default="N/A")
             unit_price = line.findtext("UnitPriceWithoutTax", default="N/A")
             total_cost = line.findtext("TotalCost", default="N/A")
+
+            # ---------- Observaciones y periodo por línea ----------
+            obs = (line.findtext("AdditionalLineItemInformation", default="") or "").strip()
+            lp = line.find("LineItemPeriod")
+            periodo_linea = ""
+            if lp is not None:
+                lp_start = (lp.findtext("StartDate", default="") or "")
+                lp_end = (lp.findtext("EndDate", default="") or "")
+                try:
+                    lp_start_f = datetime.strptime(lp_start, "%Y-%m-%d").strftime("%d/%m/%Y") if lp_start else ""
+                    lp_end_f = datetime.strptime(lp_end, "%Y-%m-%d").strftime("%d/%m/%Y") if lp_end else ""
+                    if lp_start_f or lp_end_f:
+                        periodo_linea = f"{lp_start_f}–{lp_end_f}"
+                except Exception:
+                    periodo_linea = f"{lp_start}–{lp_end}"
+
             items.append({
                 "Descripción": description,
                 "Cantidad": quantity,
                 "Precio Unitario": unit_price,
-                "Importe": total_cost
+                "Importe": total_cost,
+                "Observaciones": obs,
+                "Periodo": periodo_linea
             })
 
     firma_info = _extract_signature_info_from_xml(xml_root)
@@ -231,6 +266,7 @@ def _extract_invoice_data_from_xml(xml_root: ET.Element) -> dict:
         "Tipo Dcomento": invoice_type,
         "Moneda": invoice_currency,
         "Clase Factura": invoice_class_desc,
+        "PeriodoFactura": invoicing_period,
         "Total Factura": totals.get("InvoiceTotal", "N/A"),
         "Totales": totals,
         "Emisor": emitter,
@@ -277,7 +313,11 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
         f"<b>Fecha de Emisión:</b> {invoice.get('Fecha', 'N/A')} "
         f"<b>Número:</b> {invoice.get('Número de Factura', 'N/A')}<br/>"
         f"<b>Clase de factura:</b> {invoice.get('Clase Factura', 'N/A')} "
-        f"<b>Moneda:</b> {invoice.get('Moneda', 'N/A')}", styleN
+        f"<b>Moneda:</b> {invoice.get('Moneda', 'N/A')}<br/>"
+        f"<b>Periodo de facturación:</b> "
+        f"{(invoice.get('PeriodoFactura', {}) or {}).get('Inicio', 'N/A')} – "
+        f"{(invoice.get('PeriodoFactura', {}) or {}).get('Fin', 'N/A')}",
+        styleN
     )
 
     info_extra = Paragraph(
@@ -343,20 +383,38 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
             Paragraph("Importe", header_cell_style)
         ]]
         for item in items:
+            # Construcción de cada fila (sin columna Observaciones; se integra en Descripción)
             def _fmt(val, fmt):
                 try:
                     return fmt.format(float(val))
                 except Exception:
                     return val if val is not None else "N/A"
 
+            obs_text = (item.get("Observaciones", "") or "").strip()
+            periodo_text = (item.get("Periodo", "") or "").strip()
+
+            desc_text = item.get("Descripción", "N/A") or "N/A"
+            extra_lines = []
+            if obs_text:
+                extra_lines.append(f"({obs_text})")
+            if periodo_text:
+                extra_lines.append(f"(Periodo: {periodo_text})")
+            if extra_lines:
+                desc_text = desc_text + "\n" + "\n".join(extra_lines)
+
             data_table.append([
-                Paragraph(item.get("Descripción", "N/A"), table_cell_style),
+                Paragraph(desc_text, table_cell_style),
                 Paragraph(_fmt(item.get("Cantidad", 0), "{:.2f}"), right_align_style),
                 Paragraph(_fmt(item.get("Precio Unitario", 0), "{:.4f}"), right_align_style),
-                Paragraph(_fmt(item.get("Importe", 0), "{:.2f}"), right_align_style)
+                Paragraph(_fmt(item.get("Importe", 0), "{:.2f}"), right_align_style),
             ])
 
-        col_widths = [doc.width * 0.60, (doc.width * 0.35) / 3, (doc.width * 0.45) / 3, (doc.width * 0.40) / 3]
+        col_widths = [
+            doc.width * 0.60,  # Descripción
+            doc.width * 0.12,  # Cantidad
+            doc.width * 0.14,  # Precio Unitario
+            doc.width * 0.14   # Importe
+        ]        
         table_items = Table(data_table, colWidths=col_widths)
         table_items.setStyle(TableStyle([
             ('BOX', (0,0), (-1,-1), 1, colors.black),
@@ -404,7 +462,7 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
     firma = invoice.get("Firma", {})
     if firma and firma.get("estado", "").startswith("Firma"):
         styleN.fontSize = 7
-        # Reutilizamos getSampleStyleSheet importado a nivel de módulo (evitamos sombrear el nombre en ámbito local)
+        # Reutilizamos getSampleStyleSheet importado a nivel de módulo
         style_subtitle = ParagraphStyle(name='SubtitleCentered', parent=getSampleStyleSheet()['Heading2'], alignment=1)
 
         elements.append(Spacer(1, 12))
@@ -493,3 +551,4 @@ def render_pdf_from_xsig(
     pdf_buffer = _generate_pdf_from_invoice(invoice_data, params)
     pdf_buffer.seek(0)
     return pdf_buffer
+

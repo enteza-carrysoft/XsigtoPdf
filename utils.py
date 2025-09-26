@@ -1,4 +1,3 @@
-
 import re
 from datetime import datetime
 import pytz
@@ -11,13 +10,6 @@ def sanitize_text(value: str) -> str:
     if not v or len(v) > 50 or not _ALLOWED_RE.match(v):
         raise ValueError("Valor inválido. Usa letras, números, guiones, guiones bajos, barras o puntos (1–50).")
     return v
-
-def parse_datetime_es(value: str, tz: str = "Europe/Madrid") -> datetime:
-    from dateutil import parser as date_parser
-    dt = date_parser.parse(value)
-    if not dt.tzinfo:
-        dt = pytz.timezone(tz).localize(dt)
-    return dt.astimezone(pytz.timezone(tz))
 
 def format_datetime_es(dt: datetime) -> str:
     return dt.strftime("%d/%m/%Y %H:%M")
