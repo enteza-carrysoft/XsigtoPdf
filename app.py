@@ -4,12 +4,24 @@ from io import BytesIO
 from datetime import datetime
 import pytz
 import streamlit as st
+import os
 
 from utils import sanitize_text, parse_datetime_es, format_datetime_es, make_safe_filename
 from xsig_pdf import render_pdf_from_xsig
 
 st.set_page_config(page_title="XSIG → PDF", page_icon="🧾", layout="centered")
 
+logo_path = os.path.join(os.path.dirname(__file__), "logo-hacienda.png")
+
+col1, col2 = st.columns([1, 4])
+with col1:
+    st.image(logo_path, width=80)  # Ajusta el tamaño a tu gusto
+with col2:
+    st.markdown(
+        "<h2 style='margin-bottom:0;'>Diputación de Sevilla</h2>",
+        unsafe_allow_html=True
+    )
+    
 st.title("XSIG → PDF (Factura electrónica a PDF)")
 st.markdown(
     "Sube un archivo **XSIG/XML** de una factura electrónica, rellena los campos del **Registro Contable de Facturas** "
