@@ -53,7 +53,7 @@ with st.form("form_xsig"):
         help="Texto libre seguro."
     )
     num_rcf = st.text_input(
-        "Número RCF (opcional)",
+        "Número RCF",
         placeholder="RCF-2025-000987",
         help="Si no aplica, puedes repetir el número de registro."
     )
