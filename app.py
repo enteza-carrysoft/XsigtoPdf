@@ -48,7 +48,7 @@ with st.form("form_xsig"):
         help="Solo letras, números, guiones, guiones bajos, barras y puntos."
     )
     tipo_registro = st.text_input(
-        "Punto de Entrada / Tipo de Registro",
+        "Fecha y hora de Registro",
         placeholder="FACe / DIR3",
         help="Texto libre seguro."
     )
