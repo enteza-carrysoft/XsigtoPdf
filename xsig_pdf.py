@@ -308,7 +308,7 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
     header_cell_style = ParagraphStyle('header_cell_style', parent=styles['Normal'], fontSize=8, leading=10, alignment=1)
     right_align_style = ParagraphStyle(name='RightAlign', parent=table_cell_style, alignment=TA_RIGHT)
 
-    titulo = Paragraph("Factura", styleH)
+    titulo = Paragraph("Resumen de Factura", styleH)
     info_factura = Paragraph(
         f"<b>Fecha de Emisión:</b> {invoice.get('Fecha', 'N/A')} "
         f"<b>Número:</b> {invoice.get('Número de Factura', 'N/A')}<br/>"
@@ -322,9 +322,9 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
 
     info_extra = Paragraph(
         f"<b>Num.Registro:</b> {parametros['num_registro']}<br/>"
-        f"<b>Punto de Entrada:</b> {parametros['tipo_registro']}<br/>"
-        f"<b>Num.Factura RCF:</b> {parametros['num_rcf']}<br/>"
-        f"<b>Fecha y hora registro:</b> {parametros['fecha_hora_registro']}", styleN
+        f"<b>Fecha y hora Registro:</b> {parametros['tipo_registro']}<br/>"
+        f"<b>Num. RCF:</b> {parametros['num_rcf']}<br/>"
+        f"<b>Fecha y hora RCF:</b> {parametros['fecha_hora_registro']}", styleN
     )
 
     table_info = Table([
@@ -430,33 +430,69 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
 
     totals = invoice.get("Totales", {})
     if totals:
-        totals_data = [
-            [Paragraph("<b>Importe bruto total:</b>", styleN), Paragraph(totals.get("TotalGrossAmount", "N/A"), right_align_style)],
-            [Paragraph("<b>Descuentos generales:</b>", styleN), Paragraph(totals.get("TotalGeneralDiscounts", "N/A"), right_align_style)],
-            [Paragraph("<b>Base imponible antes de impuestos:</b>", styleN), Paragraph(totals.get("TotalGrossAmountBeforeTaxes", "N/A"), right_align_style)],
-            [Paragraph("<b>Importe de impuestos:</b>", styleN), Paragraph(totals.get("TotalTaxOutputs", "N/A"), right_align_style)],
-            [Paragraph("<b>Retenciones:</b>", styleN), Paragraph(totals.get("TotalTaxesWithheld", "N/A"), right_align_style)],
-            [Paragraph("<b>Importe total factura:</b>", styleN), Paragraph(totals.get("InvoiceTotal", "N/A"), right_align_style)]
+        def V(key, default="N/A"):
+            return totals.get(key, default)
+
+        # Datos de cada mitad
+        left_data = [
+            [Paragraph("<b>Importe bruto total:</b>", styleN), Paragraph(V("TotalGrossAmount"), right_align_style)],
+            [Paragraph("<b>Descuentos generales:</b>", styleN), Paragraph(V("TotalGeneralDiscounts"), right_align_style)],
+            [Paragraph("<b>Retenciones:</b>", styleN), Paragraph(V("TotalTaxesWithheld"), right_align_style)],
         ]
-        totals_table = Table(totals_data, colWidths=[doc.width * 0.7, doc.width * 0.3])
-        totals_table.setStyle(TableStyle([
-            ('BOX', (0,0), (-1,-1), 1, colors.black),
+        right_data = [
+            [Paragraph("<b>Base imponible antes de impuestos:</b>", styleN), Paragraph(V("TotalGrossAmountBeforeTaxes"), right_align_style)],
+            [Paragraph("<b>Importe de impuestos:</b>", styleN), Paragraph(V("TotalTaxOutputs"), right_align_style)],
+            [Paragraph("<b>Importe total factura:</b>", styleN), Paragraph(V("InvoiceTotal"), right_align_style)],
+        ]
+
+        half = doc.width / 2.0
+
+        # Tablas internas (solo líneas de filas, sin borde exterior)
+        left_table = Table(left_data, colWidths=[half * 0.70, half * 0.30])
+        left_table.setStyle(TableStyle([
             ('INNERGRID', (0,0), (-1,-1), 0.5, colors.grey),
-            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LEFTPADDING', (0,0), (-1,-1), 4),
+            ('RIGHTPADDING', (0,0), (-1,-1), 4),
+            ('TOPPADDING', (0,0), (-1,-1), 2),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
         ]))
+
+        right_table = Table(right_data, colWidths=[half * 0.70, half * 0.30])
+        right_table.setStyle(TableStyle([
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LEFTPADDING', (0,0), (-1,-1), 4),
+            ('RIGHTPADDING', (0,0), (-1,-1), 4),
+            ('TOPPADDING', (0,0), (-1,-1), 2),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ]))
+
+        # Tabla contenedora con borde exterior y línea vertical central
+        totals_table = Table([[left_table, right_table]], colWidths=[half, half])
+        totals_table.setStyle(TableStyle([
+            ('BOX', (0,0), (-1,-1), 1, colors.black),          # borde exterior (como tu boceto)
+            ('INNERGRID', (0,0), (-1,-1), 1, colors.black),     # línea vertical central entre las dos mitades
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LEFTPADDING', (0,0), (-1,-1), 0),
+            ('RIGHTPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ]))
+
         elements.append(totals_table)
         elements.append(Spacer(1, 12))
 
     if invoice.get('InfoAdicional'):
         elements.append(Paragraph("<b>Información Adicional:</b>", styleN))
         elements.append(Paragraph(invoice['InfoAdicional'], styleN))
-        elements.append(Spacer(1, 12))
+#        elements.append(Spacer(1, 12))
 
     if invoice.get('ReferenciasLegales'):
         elements.append(Paragraph("<b>Literales Legales:</b>", styleN))
         for ref in invoice['ReferenciasLegales']:
             elements.append(Paragraph(ref, styleN))
-        elements.append(Spacer(1, 12))
+#        elements.append(Spacer(1, 12))
 
     # Firma electrónica (si existe)
     firma = invoice.get("Firma", {})
@@ -465,9 +501,9 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
         # Reutilizamos getSampleStyleSheet importado a nivel de módulo
         style_subtitle = ParagraphStyle(name='SubtitleCentered', parent=getSampleStyleSheet()['Heading2'], alignment=1)
 
-        elements.append(Spacer(1, 12))
+#        elements.append(Spacer(1, 12))
         elements.append(Paragraph("Firma electrónica", style_subtitle))
-        elements.append(Spacer(1, 6))
+#        elements.append(Spacer(1, 6))
 
         firma_data = [
             [
@@ -488,12 +524,12 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
         ]
 
         col_widths = [
-            doc.width * 0.12,
-            doc.width * 0.40,
-            doc.width * 0.10,
+            doc.width * 0.11,
+            doc.width * 0.37,
+            doc.width * 0.09,
             doc.width * 0.16,
             doc.width * 0.10,
-            doc.width * 0.12
+            doc.width * 0.17
         ]
 
         table_firma = Table(firma_data, colWidths=col_widths)
