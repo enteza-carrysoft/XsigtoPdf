@@ -22,7 +22,7 @@ with col2:
         unsafe_allow_html=True
     )
 
-st.title("XSIG → PDF (Factura electrónica a PDF)")
+st.title("Factura electrónica a PDF")
 st.markdown(
     "Sube un archivo **XSIG/XML** de una factura electrónica, "
     "rellena los campos del **Registro Contable de Facturas** y genera un **PDF**. "
