@@ -323,10 +323,12 @@ def _generate_pdf_from_invoice(invoice: dict, parametros: dict) -> io.BytesIO:
     info_extra = Paragraph(
         f"<br/><br/>"
         f"<b>Num. RCF:</b> {parametros['num_rcf']}<br/>"
-        f"<b>Fecha y hora RCF:</b> {parametros['fecha_hora_registro']}<br/><br/>", styleN
+        f"<b>Fecha y hora RCF:</b> {parametros['fecha_hora_registro']}<br/><br/>"
         f"<b>Num.Registro:</b> {parametros['num_registro']}<br/>"
-        f"<b>Fecha y hora Registro:</b> {parametros['tipo_registro']}<br/>"
+        f"<b>Fecha y hora Registro:</b> {parametros['tipo_registro']}<br/>",
+        styleN
     )
+
 
     table_info = Table([
         [[titulo, info_factura], info_extra]
