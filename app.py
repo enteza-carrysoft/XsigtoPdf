@@ -49,7 +49,7 @@ with st.form("form_xsig"):
     )
     tipo_registro = st.text_input(
         "Fecha y hora de Registro",
-        placeholder="FACe / DIR3",
+        placeholder="",
         help="Texto libre seguro."
     )
     num_rcf = st.text_input(
